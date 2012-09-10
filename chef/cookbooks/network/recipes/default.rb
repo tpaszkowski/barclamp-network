@@ -564,6 +564,7 @@ end
 # Fourth, bring up any new or changed interfaces
 new_interfaces.values.sort{|a,b|a[:order] <=> b[:order]}.each do |i|
   next if i[:interface] == "bmc"
+  ran_ifup = false
   case
   when (old_interfaces[i[:interface]].nil? and i[:auto])
     # This is a new interface.  Ifup it if it should be auto ifuped.
@@ -571,6 +572,7 @@ new_interfaces.values.sort{|a,b|a[:order] <=> b[:order]}.each do |i|
       code "ifup #{i[:interface]}"
       ignore_failure true
     end
+    ran_ifup = true
   when interfaces_to_up[i[:interface]]
     # This is an interface that we had in common with old_interfaces that
     # did not have an identical configuration from the last time.
@@ -579,9 +581,12 @@ new_interfaces.values.sort{|a,b|a[:order] <=> b[:order]}.each do |i|
       code interfaces_to_up[i[:interface]]
       ignore_failure true
     end
+    ran_ifup = true
   end
   # Only delay if we ifup'ed a real physical interface.
-  delay = ::File.exists? "/sys/class/net/#{i[:interface]}/device" unless delay
+  if ran_ifup
+    delay = ::File.exists? "/sys/class/net/#{i[:interface]}/device" unless delay
+  end
 end
 
 # If we need to sleep now, do it.
