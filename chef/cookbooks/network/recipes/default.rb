@@ -590,10 +590,35 @@ new_interfaces.values.sort{|a,b|a[:order] <=> b[:order]}.each do |i|
 end
 
 # If we need to sleep now, do it.
-delay_time = delay ? node["network"]["start_up_delay"] : 0
-Chef::Log.info "Sleeping for #{delay_time} seconds due to new link coming up"
-bash "network delay sleep" do
-  code "sleep #{delay_time}"
-  only_if { delay_time > 0 }
+if delay
+  delay_time = node["network"]["start_up_delay"]
+  admin_ip = nil
+  crowbar_nodes = search(:node, "roles:crowbar")
+  if crowbar_nodes
+    admin_net = Chef::Recipe::Barclamp::Inventory.get_network_by_type(crowbar_nodes[0], "admin")
+    admin_ip = admin_net.address if admin_net
+  end
+  if admin_ip
+    # We know where the admin node is, try to ping it
+    Chef::Log.info "Test ping to crowbar admin node on #{admin_ip} due to new link coming up"
+    %x{ping -w1 -c1 #{admin_ip} > /dev/null 2>&1}
+    if $?.exitstatus != 0
+      if delay_time > 0
+        ((delay_time + 9) / 10).times do
+          Chef::Log.info "Ping failed (sleeping 10 seconds)"
+          sleep 10
+          %x{ping -w1 -c1 #{admin_ip} > /dev/null 2>&1}
+          break if $?.exitstatus == 0
+        end
+        Chef::Log.info "Ping failed - giving up" unless $?.exitstatus == 0
+      else
+        Chef::Log.info "Ping failed - ignoring (no start_up_delay configured)"
+      end
+    end
+  else
+    # Can't find the admin node.  Fall back to just sleeping with no ping
+    Chef::Log.info "Sleeping for #{delay_time} seconds due to new link coming up"
+    sleep delay_time if delay_time > 0
+  end
 end
 
