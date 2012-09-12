@@ -533,7 +533,7 @@ end
       only_if "pidof dhclient3"
     end
     bash "kill dhcpcd" do
-      code "killall dhcpcd"
+      code "killall -9 dhcpcd"
       only_if "pidof dhcpcd"
     end
     if new_interfaces[i][:config] == "static"
