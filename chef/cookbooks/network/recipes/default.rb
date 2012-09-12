@@ -598,27 +598,33 @@ if delay
     admin_net = Chef::Recipe::Barclamp::Inventory.get_network_by_type(crowbar_nodes[0], "admin")
     admin_ip = admin_net.address if admin_net
   end
-  if admin_ip
-    # We know where the admin node is, try to ping it
-    Chef::Log.info "Test ping to crowbar admin node on #{admin_ip} due to new link coming up"
-    %x{ping -w1 -c1 #{admin_ip} > /dev/null 2>&1}
-    if $?.exitstatus != 0
-      if delay_time > 0
-        ((delay_time + 9) / 10).times do
-          Chef::Log.info "Ping failed (sleeping 10 seconds)"
-          sleep 10
-          %x{ping -w1 -c1 #{admin_ip} > /dev/null 2>&1}
-          break if $?.exitstatus == 0
+  ruby_block "start_up_delay" do
+    block do
+      if admin_ip
+        # We know where the admin node is, try to ping it
+        Chef::Log.info "Test ping to crowbar admin node on #{admin_ip} due to new link coming up"
+        %x{ping -w1 -c1 #{admin_ip} > /dev/null 2>&1}
+        if $?.exitstatus != 0
+          if delay_time > 0
+            ((delay_time + 9) / 10).times do
+              Chef::Log.info "Ping failed (sleeping 10 seconds)"
+              sleep 10
+              %x{ping -w1 -c1 #{admin_ip} > /dev/null 2>&1}
+              break if $?.exitstatus == 0
+            end
+            Chef::Log.info "Ping failed - giving up" unless $?.exitstatus == 0
+          else
+            Chef::Log.info "Ping failed - ignoring (no start_up_delay configured)"
+          end
         end
-        Chef::Log.info "Ping failed - giving up" unless $?.exitstatus == 0
       else
-        Chef::Log.info "Ping failed - ignoring (no start_up_delay configured)"
+        # Can't find the admin node.  Fall back to just sleeping with no ping
+        Chef::Log.info "Sleeping for #{delay_time} seconds due to new link coming up"
+        sleep delay_time if delay_time > 0
       end
     end
-  else
-    # Can't find the admin node.  Fall back to just sleeping with no ping
-    Chef::Log.info "Sleeping for #{delay_time} seconds due to new link coming up"
-    sleep delay_time if delay_time > 0
+    action :create
+    ignore_failure true  # may or may not be necssary, but shouldn't hurt
   end
 end
 
